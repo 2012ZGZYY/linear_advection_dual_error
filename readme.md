@@ -1,0 +1,1 @@
+I modify step_12 of deal.ii to solve a 2D linear advection equation. it used adjoint based error estimation method to adaptively refine the mesh. Look at tutorial of step_12 and Ralf Hartmann's doctoral dissertation "Adaptive finite element methods for the compressible euler equations" for more detail.

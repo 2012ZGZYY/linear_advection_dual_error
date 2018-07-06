@@ -4,19 +4,10 @@
  *
  * This file is part of the deal.II library.
  *
- * The deal.II library is free software; you can use it, redistribute
- * it, and/or modify it under the terms of the GNU Lesser General
- * Public License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- * The full text of the license can be found in the file LICENSE at
- * the top level of the deal.II distribution.
+ * modified by zeng @Beihang University on 2018/07
  *
  * ---------------------------------------------------------------------
-  //modified by zeng @Beihang University on 2018/07
- *
- * Author: Guido Kanschat, Texas A&M University, 2009
  */
-
 
 // The first few files have already been covered in previous examples and will
 // thus not be further commented on:
@@ -658,7 +649,7 @@ namespace Step12
    template<int dim>
    void 
    DualSolver<dim>::assemble_system(){
-       MeshWorker::IntegrationInfoBox<dim>   info_box;   //provide the FeValues needed to do integration
+        MeshWorker::IntegrationInfoBox<dim>   info_box;   //provide the FeValues needed to do integration
        const unsigned int n_gauss_points = Solver<dim>::quadrature.size();
        info_box.initialize_gauss_quadrature(n_gauss_points,n_gauss_points,n_gauss_points);
 

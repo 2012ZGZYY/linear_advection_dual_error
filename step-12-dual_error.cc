@@ -12,7 +12,7 @@
  * the top level of the deal.II distribution.
  *
  * ---------------------------------------------------------------------
-
+  //modified by zeng @Beihang University on 2018/07
  *
  * Author: Guido Kanschat, Texas A&M University, 2009
  */
@@ -53,6 +53,7 @@
 #include <deal.II/lac/precondition_block.h>
 // We are going to use gradients as refinement indicator.
 #include <deal.II/numerics/derivative_approximation.h>
+#include <deal.II/numerics/error_estimator.h>
 
 // Here come the new include files for using the MeshWorker framework. The
 // first contains the class MeshWorker::DoFInfo, which provides local
@@ -74,6 +75,7 @@
 // without prefix.
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 
 
 namespace Step12
@@ -567,7 +569,7 @@ namespace Step12
           }
       }
   }
-  }  //the namespace AdvectionSolver end here
+ }  //the namespace AdvectionSolver end here
 
   namespace DualSolverData   //contain the b.cs and rhs of the dualsolver
   {
@@ -613,7 +615,7 @@ namespace Step12
     //     return_value += std::pow(p(i),2.);   //rhs function is: f=x^2+y^2
     return return_value;          //the equation has no rhs. 
    }
-   }   //end of the DualSolverData namespace
+  }   //end of the DualSolverData namespace
 
 
 
@@ -678,7 +680,7 @@ namespace Step12
         std::bind(&DualSolver<dim>::integrate_boundary_term,this,std::placeholders::_1,std::placeholders::_2),
         std::bind(&DualSolver<dim>::integrate_face_term,this,std::placeholders::_1,std::placeholders::_2,std::placeholders::_3,std::placeholders::_4),
         assembler);
-}
+   }
    template<int dim>
    void
    DualSolver<dim>::integrate_cell_term(DoFInfo& dinfo,CellInfo& info)
@@ -741,7 +743,7 @@ namespace Step12
                                  fe_v.shape_value(i,point) *
                                  JxW[point];
         }
- }
+   }
    template<int dim>
    void
    DualSolver<dim>::integrate_face_term(DoFInfo& dinfo1,DoFInfo& dinfo2,
@@ -813,6 +815,13 @@ namespace Step12
   
    }
    
+   enum RefinementCriterion
+   {
+     dual_weighted_error_estimator,
+     global_refinement,
+     kelly_indicator,
+     derivative 
+   }; 
 
    //the WeightedResidual class
    template<int dim>
@@ -824,12 +833,13 @@ namespace Step12
                        const Quadrature<dim-1>&  face_quadrature);
       virtual void initialize_problem();
       virtual void solve_problem();
-      virtual void output_results(unsigned int cycle) const;
+      virtual void output_results(unsigned int cycle);
       virtual void refine_grid();
       virtual unsigned int n_dofs() const;
       virtual unsigned int n_active_cells() const;
       double return_functional() const;
    private:
+      std::clock_t                start, timer;
       typedef typename std::map<typename DoFHandler<dim>::face_iterator,double> FaceIntegrals;
       typedef typename DoFHandler<dim>::active_cell_iterator active_cell_iterator;
       struct CellData{
@@ -925,6 +935,7 @@ namespace Step12
    void
    WeightedResidual<dim>::initialize_problem()
    {
+      start = std::clock();
       PrimalSolver<dim>::initialize_problem();  //only use PrimalSolver to edit the triangulation
       //DualSolver<dim>::initialize_problem();   
    }
@@ -937,7 +948,7 @@ namespace Step12
    }
    template<int dim>
    void
-   WeightedResidual<dim>::output_results(unsigned int cycle) const{
+   WeightedResidual<dim>::output_results(unsigned int cycle){
       // Write the grid in eps format.
     std::string filename = "primal_grid-";
     filename += ('0' + cycle);
@@ -972,17 +983,69 @@ namespace Step12
     data_out.build_patches ();
 
     data_out.write_gnuplot(gnuplot_output);
+
+    //write out dofs----time----true error in the target functional successively to the same file
+    std::ofstream curve_graph("curve_graph.txt", std::ios::app);      
+    timer = std::clock();
+    double current_time = (double)(timer-start)/CLOCKS_PER_SEC;
+
+    if(cycle == 0)
+       curve_graph<<"dofs"
+                  <<std::setw(30)<<"J(e)"
+                  <<std::setw(30)<<"time"<<std::endl;                  
+    else
+       curve_graph<<n_dofs()
+                  <<std::setw(30)<<std::setprecision(15)<<(return_functional()-0.192808353547215)
+                  <<std::setw(30)<<std::setprecision(15)<<current_time<<std::endl;
    }
    template<int dim>
    void
-   WeightedResidual<dim>::refine_grid(){
-   // use the dual weighted error estimator as indicator to execute the refinement process
+   WeightedResidual<dim>::refine_grid(){   
       Vector<float> error_indicators(PrimalSolver<dim>::n_active_cells());
-      estimate_error(error_indicators);
-      for(Vector<float>::iterator i=error_indicators.begin();i!=error_indicators.end();++i)
-          *i = std::fabs(*i);
-      GridRefinement::refine_and_coarsen_fixed_number(this->triangulation,error_indicators,0.3,0.1);
-      this->triangulation.execute_coarsening_and_refinement();
+
+      //You have to choose here which refinement_criterion to use in this code, choices include:
+        /****************************
+        dual_weighted_error_estimator,
+        global_refinement,
+        kelly_indicator,
+        derivative
+        ****************************/ 
+      const RefinementCriterion   refinement_criterion = dual_weighted_error_estimator;  
+      
+      switch(refinement_criterion)
+        {
+         // use the dual weighted error estimator as indicator to execute the refinement process
+         case dual_weighted_error_estimator:
+         {
+            estimate_error(error_indicators);
+            for(Vector<float>::iterator i=error_indicators.begin();i!=error_indicators.end();++i)
+               *i = std::fabs(*i);
+            GridRefinement::refine_and_coarsen_fixed_number(this->triangulation,error_indicators,0.3,0.1);
+            this->triangulation.execute_coarsening_and_refinement();
+            break;
+         }
+         case global_refinement:
+         {
+            this->triangulation.refine_global(1);
+            break;
+         }
+         case kelly_indicator:
+         {
+            KellyErrorEstimator<dim>::estimate(PrimalSolver<dim>::dof_handler,
+                                               QGauss<dim-1>(3),
+                                               typename FunctionMap<dim>::type(),
+                                               PrimalSolver<dim>::solution,
+                                               error_indicators);
+            GridRefinement::refine_and_coarsen_fixed_number(this->triangulation,error_indicators,0.3,0.1);
+            this->triangulation.execute_coarsening_and_refinement();
+            break;
+         }
+         case derivative:
+         {
+            PrimalSolver<dim>::refine_grid();
+            break;
+         }
+        }
    }
    template<int dim>
    unsigned int
@@ -1357,7 +1420,8 @@ namespace Step12
     
     GridGenerator::subdivided_hyper_rectangle (triangulation,repetitions,bottom_left,upper_right);  //creat a rectangle triangulation, p1/p2 specify the domain
   } 
-  
+   
+
   template<int dim>
   void run_simulation(){
 /*
@@ -1374,17 +1438,20 @@ namespace Step12
       const QGauss<dim>           quadrature(dual_fe_degree+1); 
       const QGauss<dim-1>           face_quadrature(dual_fe_degree+1); 
       AdvectionSolver::WeightedResidual<dim>  dg_method(primal_fe,dual_fe,quadrature,face_quadrature);
- 
-      
+            
+
       for (unsigned int cycle=0; cycle<10; ++cycle)
       {
         deallog << "Cycle " << cycle << std::endl;
-        if (cycle==0){
-        dg_method.initialize_problem();
+        if (cycle==0)
+        {
+           dg_method.initialize_problem();
         }
         else
-        dg_method.refine_grid (); 
-  
+        {
+           dg_method.refine_grid (); 
+        }      
+ 
         deallog << "Number of active cells:       "
                 << dg_method.n_active_cells()
                 << std::endl;

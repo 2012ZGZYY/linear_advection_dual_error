@@ -137,7 +137,6 @@ namespace Step12
    {
    public:
            Base();
-	   //Base(Triangulation<dim>& coarse_grid);
 	   virtual ~Base();
            virtual void initialize_problem()=0;
 	   virtual void solve_problem()=0;
@@ -146,12 +145,10 @@ namespace Step12
            virtual unsigned int n_dofs() const=0;
            virtual unsigned int n_active_cells() const=0;
    protected:
-       //const SmartPointer<Triangulation<dim>> triangulation;
        Triangulation<dim> triangulation;
    };
    template<int dim>
    Base<dim>::Base()
-   //Base<dim>::Base(Triangulation<dim>& coarse_grid):triangulation(&coarse_grid)
    {}
    template<int dim>
    Base<dim>::~Base()
@@ -163,7 +160,6 @@ namespace Step12
    class Solver:public virtual Base<dim>
    {
    public:
-       //Solver(Triangulation<dim>  &triangulation,FE_DGQ<dim>         &fe);
        Solver(const FiniteElement<dim>& fe,
               const Quadrature<dim>&    quadrature,
               const Quadrature<dim-1>&  face_quadrature);
@@ -216,14 +212,7 @@ namespace Step12
    Solver<dim>::~Solver(){
         dof_handler.clear();
    }
-/*
-   template<int dim>
-   Solver<dim>::Solver(Triangulation<dim>  &triangulation,
-	               FE_DGQ<dim>         &fe)
-                :
-                Base<dim>(triangulation),fe(fe),dof_handler(triangulation)
-   {}
-*/
+
    template<int dim>
    Solver<dim>::LinearSystem::LinearSystem()    //default constructor
    {}
@@ -278,12 +267,6 @@ namespace Step12
    template<int dim>
    class PrimalSolver:public Solver<dim>{
    public:
-/*
-       PrimalSolver(Triangulation<dim>  &triangulation,
-	                FE_DGQ<dim>         &fe,
-					Function<dim> &boundary_function
-					Function<dim>  &rhs_function);
-*/
        PrimalSolver(const FiniteElement<dim>& fe,
                     const Quadrature<dim>&    quadrature,
                     const Quadrature<dim-1>&  face_quadrature);
@@ -301,21 +284,8 @@ namespace Step12
        virtual void integrate_boundary_term(DoFInfo& dinfo,CellInfo& info);
        virtual void integrate_face_term(DoFInfo& dinfo1,DoFInfo& dinfo2,CellInfo& info1,CellInfo& info2);
    };
-   //constructor of primal solver, it's called as 
-   //"PrimalSolver<2> dg_method"(triangulation,fe,boundary_function,rhs_function)
-/*
-   template<int dim>
-   PrimalSolver(Triangulation<dim> &triangulation,
-                FE_DGQ<dim>        &fe,
-                Function<dim>      &boundary_function,
-                Function<dim>      &rhs_function)
-                :
-                Base<dim>(triangulation),
-                Solver<dim>(triangulation,fe),
-                boundary_function(),
-                rhs_function()
-   {}
-*/
+
+
    template<int dim>
    PrimalSolver<dim>::PrimalSolver(const FiniteElement<dim>& fe,
                                    const Quadrature<dim>&    quadrature,
@@ -848,7 +818,7 @@ namespace Step12
          std::vector<double> rhs_values;
          std::vector<double> dual_weights;
          const SmartPointer<const Function<dim>> right_hand_side;   //this pointer always point to the rhs function of the primal_solver
-         typename std::vector<Tensor<1,dim>> cell_grads;  //tensor of rank 1 (i.e. a vector with dim components), why need typename??
+         typename std::vector<Tensor<1,dim>> cell_grads;  //tensor of rank 1 (i.e. a vector with dim components)
          CellData(const FiniteElement<dim>& fe,
                   const Quadrature<dim>&    quadrature,
                   const Function<dim>&      right_hand_side);
@@ -930,14 +900,13 @@ namespace Step12
       dual_weights(face_quadrature.size()),
       face_values(face_quadrature.size()),
       neighbor_values(face_quadrature.size())
-   {/*???*/}
+   { }
    template<int dim>
    void
    WeightedResidual<dim>::initialize_problem()
    {
       start = std::clock();
       PrimalSolver<dim>::initialize_problem();  //only use PrimalSolver to edit the triangulation
-      //DualSolver<dim>::initialize_problem();   
    }
    template<int dim>
    void 
@@ -1424,16 +1393,9 @@ namespace Step12
 
   template<int dim>
   void run_simulation(){
-/*
-      Triangulation<dim> triangulation;
-      initialize_problem(triangulation);    //generate mesh
-      FE_DGQ<dim>               fe;
-      BoundaryValues<dim>       boundary_function;      
-      PrimalSolver<dim>  dg_method(triangulation, fe, boundary_function, rhs_function); 
-*/
       unsigned int primal_fe_degree = 1;
       unsigned int dual_fe_degree = 2;
-      const FE_DGQ<dim>           primal_fe(primal_fe_degree);   //??may cause problem
+      const FE_DGQ<dim>           primal_fe(primal_fe_degree);   
       const FE_DGQ<dim>           dual_fe(dual_fe_degree);
       const QGauss<dim>           quadrature(dual_fe_degree+1); 
       const QGauss<dim-1>           face_quadrature(dual_fe_degree+1); 
@@ -1505,64 +1467,6 @@ int main ()
   return 0;
 }
    
-
-
-
-
-
-
-
-
-
-
-
-/*
-  template <int dim>
-  class AdvectionProblem
-  {
-  public:
-    AdvectionProblem ();
-    void run ();
-
-  private:
-    void initialize_problem ();
-    void setup_system ();
-    void assemble_system ();
-    void solve (Vector<double> &solution);
-    void refine_grid ();
-    void output_results (const unsigned int cycle) const;
-
-    Triangulation<dim>   triangulation;
-    const MappingQ1<dim> mapping;
-
-    // Furthermore we want to use DG elements of degree 1 (but this is only
-    // specified in the constructor). If you want to use a DG method of a
-    // different degree the whole program stays the same, only replace 1 in
-    // the constructor by the desired polynomial degree.
-    FE_DGQ<dim>          fe;
-    DoFHandler<dim>      dof_handler;
-
-    // The next four members represent the linear system to be
-    // solved. <code>system_matrix</code> and <code>right_hand_side</code> are
-    // generated by <code>assemble_system()</code>, the <code>solution</code>
-    // is computed in <code>solve()</code>. The <code>sparsity_pattern</code>
-    // is used to determine the location of nonzero elements in
-    // <code>system_matrix</code>.
-    SparsityPattern      sparsity_pattern;
-    SparseMatrix<double> system_matrix;
-
-    Vector<double>       solution;
-    Vector<double>       right_hand_side;
-
-    typedef MeshWorker::DoFInfo<dim> DoFInfo;
-    typedef MeshWorker::IntegrationInfo<dim> CellInfo;
-  };
-
-*/
-
-
-// The following <code>main</code> function is similar to previous examples as
-// well, and need not be commented on.
 
 
 
